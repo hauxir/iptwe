@@ -1,0 +1,4 @@
+Flask
+requests
+m3u_parser
+pymediainfo

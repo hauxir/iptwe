@@ -1,0 +1,422 @@
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+  <title>TV</title>
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+  <script src="/static/chromecastjs.js"></script>
+  <script src="https://cdn.jsdelivr.net/hls.js/latest/hls.min.js"></script>
+  <script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+  <style>
+html {
+  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  margin: 0px;
+  background-color: #060606;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+#channelmenu {
+  background-color: #000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+#channelmenu select {
+  width: 200px;
+  margin: 0 auto;
+  height: 30px;
+}
+
+#channelmenu #channels {
+  flex: 1;
+  overflow-y: scroll;
+  flex-wrap: wrap;
+  display: flex;
+}
+
+#channels > div{
+  width: 200px;
+  height: 200px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  padding: 10px;
+  margin: auto;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+#channels > div > img {
+  width: 100px;
+}
+
+#channels > div:hover{
+  background-color: #fff;
+  background-color: rgba(255,255,255,0.1);
+  cursor: pointer;
+}
+
+#loadingSpinner {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto;
+    pointer-events: none;
+    width: 2.5em;
+    height: 2.5em;
+    border: 0.4em solid transparent;
+    border-color: rgba(0, 0, 0, 0);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: loadingspin 1s linear infinite;
+}
+
+@keyframes loadingspin {
+  100% {
+    transform: rotate(360deg)
+  }
+}
+
+video {
+  flex: 1;
+  width: 100%;
+  height: 0;
+}
+
+#playbutton {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  z-index: 9999;
+  background-color: black;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+  font-size: 100px;
+  cursor: pointer;
+  color: #fff;
+}
+
+#backbutton {
+  margin-top: 5px;
+}
+
+.fullscreen_icon {
+  background-image: url("/static/fullscreen_icon.svg");
+  margin-top: 10px;
+  margin-bottom: 10px;
+  height: 20px;
+  width: 20px;
+}
+
+.chromecast_icon {
+  background-image: url("/static/chromecast_icon.svg");
+  margin-top: 10px;
+  margin-bottom: 10px;
+  height: 25px;
+  width: 25px;
+}
+
+.topMenu {
+  align-items: center;
+  background-color: #060606;
+  color: #f8f9fa;
+  display: none;
+  height: 60px;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.topMenu a {
+  color: #f8f9fa;
+  left: 0;
+  margin: auto;
+  max-width: 100px;
+  position: absolute;
+  right: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
+.topMenu a:hover {
+  text-decoration: underline;
+}
+
+button {
+  align-items: center;
+  background-color: transparent;
+  border-radius: 5px;
+  border: 0px;
+  display: flex;
+  font-size: 24px;
+  height: 50px;
+  justify-content: center;
+  margin: 0px 10px;
+  padding: 0px;
+  text-align: center;
+  width: 100px;
+}
+
+.topMenu div {
+  margin: 0px;
+  padding: 0px;
+}
+
+button:hover {
+  background-color: #555;
+  cursor: pointer;
+}
+
+.topMenu .group {
+  display: flex;
+}
+  </style>
+</head>
+
+<body>
+
+<div style="display:none;" id="channelmenu">
+    <button id="backbutton" onclick="closeChannelmenu()">
+	    ⬅️
+    </button>
+    <select></select>
+    <div id="channels">
+    </div>
+</div>
+
+<div class="topMenu">
+  <button id="channelsbutton" onclick="channelmenu();">📺</button>
+  <a href="/stream.m3u8">stream.m3u8</a>
+  <div class="group">
+    <button id="chromecastbutton" onclick="cast();">
+      <div class="chromecast_icon"></div>
+    </button>
+    <button id="fullscreenbutton" onclick="fullscreen();">
+      <div class="fullscreen_icon"></div>
+    </button>
+  </div>
+</div>
+
+<div id="loadingSpinner"></div>
+
+<video autoplay controls style="display:none;"></video>
+
+<script>
+var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+var isChrome = !!window.chrome;
+var isSafari = !!window.safari;
+var isIOS = /iPad|iPhone|iPod/.test(navigator.platform);
+
+var loadingSpinnerEl = document.getElementById('loadingSpinner');
+var videoEl = document.getElementsByTagName("video")[0];
+var fullscreenbuttonEl = document.getElementById("fullscreenbutton");
+var chromecastbuttonEl = document.getElementById("chromecastbutton");
+var playButtonEl = $('<div id="playbutton" onclick="play();">▶️</div>');
+var channelmenuEl = document.getElementById("channelmenu");
+
+if (isMobile) {
+  fullscreenbuttonEl.remove();
+  chromecastbuttonEl.remove();
+} else if (!isChrome) {
+  chromecastbuttonEl.remove();
+}
+
+var channelId;
+var hls;
+
+async function tryPlay() {
+  try {
+    if(videoEl) {
+      await videoEl.play();
+    }
+  } catch {
+    if(!isSafari || isIOS) {
+      $(document.body).append(playButtonEl);
+    }
+  }
+}
+
+async function loop() {
+  var status = await (await fetch("/status")).json();
+
+  if (status.loading) {
+    videoEl.style.display = "none";
+    loadingSpinnerEl.style.display = "flex";
+    if (hls) {
+      hls.detachMedia();
+      hls.destroy();
+    }
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+  } else if (channelId !== status.channel_id) {
+
+    if(!status.channel_id) {
+      loadingSpinnerEl.style.display = "none";
+      return;
+    }
+
+    if(isSafari || isIOS) {
+      videoEl.autoplay = true;
+      videoEl.src = location.origin + "/stream.m3u8";
+      videoEl.style.display = "flex";
+      loadingSpinnerEl.style.display = "none";
+    } else {
+      if(hls) {
+        hls.detachMedia();
+        hls.destroy();
+      }
+      hls = new Hls({
+	maxBufferSize: 0,
+	maxBufferLength: 30,
+	liveSyncDuration: 30,
+	liveMaxLatencyDuration: Infinity
+      });
+      hls.attachMedia(videoEl);
+      hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+        hls.loadSource("/stream.m3u8");
+        videoEl.style.display = "flex";
+        loadingSpinnerEl.style.display = "none";
+      });
+    }
+
+    channelId = status.channel_id;
+  }
+}
+
+loop();
+
+setInterval(function() { loop(); }, 2000);
+
+var timeout;
+function mousemove_listener() {
+  document.getElementsByClassName("topMenu")[0].style.display = "flex";
+  clearTimeout(timeout);
+  timeout = setTimeout(function() {
+    document.getElementsByClassName("topMenu")[0].style.display = "none";
+  }, 2000);
+};
+mousemove_listener();
+document.addEventListener("mousemove", mousemove_listener);
+document.addEventListener("touchstart", mousemove_listener);
+document.addEventListener("click", mousemove_listener);
+
+async function play() {
+  if (videoEl && videoEl.src) {
+    try {
+      await videoEl.play();
+      if(playButtonEl) {
+        playButtonEl.remove();
+      }
+    } catch(e) {
+      if(!isSafari || isIOS) {
+        $(document.body).append(playButtonEl);
+      }
+      console.warn(e);
+    }
+  }
+}
+
+function closeChannelmenu() {
+  channelmenuEl.style.display = "none";
+}
+
+async function channelmenu() {
+  var channelsEl = document.getElementById("channels");
+  channelmenuEl.style.display = "flex";
+  if(channelsEl.innerHTML.trim() !== "") return;
+  var req = await fetch("/channels.json");
+  var categories = await req.json();
+  var channelselectorEl = document.getElementsByTagName("select")[0];
+  for(var i in categories) {
+    var opt = document.createElement('option');
+    opt.value = i;
+    opt.innerHTML = categories[i].name;
+    channelselectorEl.appendChild(opt);
+  }
+  channelselectorEl.onchange = function() {
+    var fragment = document.createDocumentFragment();
+    while (channelsEl.firstChild) channelsEl.removeChild(channelsEl.firstChild);
+    var category = categories[channelselectorEl.selectedIndex];
+      var channels = category.channels;
+      for(var j in channels) {
+        var channel = channels[j];
+        var channelEl = document.createElement('div');
+        (function(channel_id) {
+          channelEl.onclick = async function() {
+            fetch("/api/set_channel/",
+              {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+  	      body: JSON.stringify({channel_id: channel_id})
+              }
+            );
+            closeChannelmenu();
+          }
+        })(channel.id)
+        channelEl.innerHTML = channels.length < 5000 ? '<img loading=lazy src="' + channel.logo + '"/>' + channel.name : channel.name;
+        fragment.appendChild(channelEl);
+      }
+     channelsEl.appendChild(fragment);
+  }
+  channelselectorEl.onchange();
+}
+
+function fullscreen() {
+  if (!document.fullscreenElement &&
+    !document.mozFullScreenElement && !document.webkitFullscreenElement) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    } else if (document.documentElement.mozRequestFullScreen) {
+      document.documentElement.mozRequestFullScreen();
+    } else if (document.documentElement.webkitRequestFullscreen) {
+      document.documentElement.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+    }
+  } else {
+    if (document.cancelFullScreen) {
+      document.cancelFullScreen();
+    } else if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+    } else if (document.webkitCancelFullScreen) {
+      document.webkitCancelFullScreen();
+    }
+  }
+}
+
+function cast() {
+  var root = window.location.origin;
+  var media = {
+    content: location.origin + "/stream.m3u8"
+  };
+  var cc = new ChromecastJS();
+  cc.cast(media);
+}
+
+</script>
+
+</body>
+</html>

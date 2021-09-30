@@ -1,0 +1,9 @@
+version: "3"
+
+services:
+  alarm:
+    build: .
+    volumes:
+        - ./app:/app
+    ports:
+      - "4000:5000"
